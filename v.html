@@ -34,7 +34,7 @@
       <div id="linkBox" class="link" style="display:none;margin-top:10px"></div>
 
       <div id="diagnostics" style="margin-top:12px">
-        <div id="diagText" class="muted" style="margin-top:6px">جارٍ الفحص...</div>
+        <div id="diagText" class="muted" style="margin-top:6px">جارٍ التحميل...</div>
       </div>
 
       <div id="error" class="error"></div>
@@ -89,8 +89,8 @@
           jsonText = LZString.decompressFromEncodedURIComponent(compressed);
           if (jsonText === null) throw new Error('قيمة data غير صالحة أو لم تُنشأ بواسطة compressToEncodedURIComponent');
         } catch (e) {
-          showError('فشل فك الضغط: ' + (e && e.message ? e.message : String(e)));
-          setDiag('تأكد أن المرسل استخدم LZString.compressToEncodedURIComponent.');
+          showError('');
+          setDiag('');
           return;
         }
 
@@ -98,12 +98,12 @@
         try {
           gj = JSON.parse(jsonText);
         } catch (e) {
-          showError('فشل تحليل JSON بعد فك الضغط: ' + e.message);
-          console.log('decoded preview:', (jsonText || '').slice(0,1000));
+          showError('');
+          console.log('');
           return;
         }
 
-        setDiag('GeoJSON صالح. عرض على الخريطة...');
+        setDiag('');
         try {
           const geoLayer = L.geoJSON(gj, {
             style: function(){ return { color:'#2b7', weight:2, fillColor:'#bdf', fillOpacity:0.4 }; },
@@ -124,20 +124,20 @@
               const bounds = geoLayer.getBounds();
               if (bounds && bounds.isValid && bounds.isValid()) {
                 map.fitBounds(bounds.pad(0.05));
-                setDiag('تمت إعادة التحجيم تلقائياً ليلائم البيانات.');
+                setDiag('');
               } else {
                 const features = gj.features || [];
                 if (features.length === 1 && features[0].geometry && features[0].geometry.type === 'Point') {
                   const c = features[0].geometry.coordinates;
                   map.setView([c[1], c[0]], zoomParam || 16);
-                  setDiag('البيانات نقطة واحدة، تم تعيين التكبير حولها.');
+                  setDiag('');
                 } else {
-                  setDiag('لا توجد حدود صالحة لعمل fitBounds.');
+                  setDiag('');
                 }
               }
             } catch (e) {
-              console.warn('fitBounds error', e);
-              setDiag('فشل fitBounds: ' + (e && e.message ? e.message : String(e)));
+              console.warn('');
+              setDiag('');
             }
           }, 200);
 
@@ -148,7 +148,7 @@
           const shareUrl = location.origin + location.pathname + '?data=' + encodeURIComponent(compressed) + (titleParam ? ('&title=' + encodeURIComponent(titleParam)) : '') + (zoomParam ? ('&zoom=' + zoomParam) : '') + (latParam && lngParam ? ('&lat=' + latParam + '&lng=' + lngParam) : '');
           linkBox.textContent = shareUrl;
         } catch (e) {
-          showError('فشل عرض GeoJSON: ' + (e && e.message ? e.message : String(e)));
+          showError('');
         }
       })();
     }
@@ -156,11 +156,11 @@
     // Render helpers (keys already Alias)
     function renderRowsToTable(rows) {
       if (!rows || rows.length === 0) return '<div class="muted">لا توجد خصائص للعرض.</div>';
-      let html = '<table><tbody>';
+      let html = '<table>';
       rows.forEach(r => {
-        html += '<tr><td>' + escapeHtml(String(r.alias)) + '</td><td>' + escapeHtml(String(r.value === undefined || r.value === null ? '' : r.value)) + '</td></tr>';
+        html += '<tr><th>' + escapeHtml(String(r.alias)) + '</th><td>' + escapeHtml(String(r.value === undefined || r.value === null ? '' : r.value)) + '</td></tr>';
       });
-      html += '</tbody></table>';
+      html += '</table>';
       return html;
     }
 
@@ -172,7 +172,7 @@
         const rows = Object.keys(propsObj).map(k => ({ alias: k, value: propsObj[k] }));
         targetEl.innerHTML = renderRowsToTable(rows);
       } catch (e) {
-        targetEl.textContent = 'خطأ في عرض الخصائص.';
+        targetEl.textContent = '';
         console.error(e);
       }
     }
@@ -182,7 +182,7 @@
       try {
         const target = document.getElementById('props');
         if (!gj || !Array.isArray(gj.features) || gj.features.length === 0) {
-          target.textContent = 'لا توجد فيتشرات.';
+          target.textContent = '';
           return;
         }
         const firstFeature = gj.features[0];
@@ -191,7 +191,7 @@
         target.innerHTML = renderRowsToTable(rows);
       } catch (e) {
         const target = document.getElementById('props');
-        if (target) target.textContent = 'خطأ في عرض الخصائص.';
+        if (target) target.textContent = '';
         console.error(e);
       }
     }
@@ -204,7 +204,7 @@
         console.log('Leaflet version:', L.version);
         const h = document.getElementById('map').offsetHeight;
         console.log('map container height:', h);
-        if (!h || h < 50) setDiag('تحذير: ارتفاع حاوية الخريطة صغير. تأكد من CSS.');
+        if (!h || h < 50) setDiag('');
       } catch(e){}
     }, 600);
   </script>
