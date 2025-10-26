@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>عارض الطبقة المضغوطة</title>
+  <title>عارض الطبقات المضغوطة</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     html,body{height:100%;margin:0;font-family:Tahoma,Arial,sans-serif;background:#fff;color:#111}
@@ -92,13 +92,14 @@
     const btnDownload = document.getElementById('btnDownload');
     const btnToggleLink = document.getElementById('btnToggleLink');
 
-    // أخفِ العرض الافتراضي للرابط
+    // Toggle رابط العرض
     linkBox.style.display = 'none';
     btnToggleLink.addEventListener('click', function(){
       if (linkBox.style.display === 'none'){ linkBox.style.display = 'block'; btnToggleLink.textContent = 'إخفاء الرابط'; }
       else { linkBox.style.display = 'none'; btnToggleLink.textContent = 'إظهار الرابط'; }
     });
 
+    // --- Process data ---
     if (!compressed) {
       setDiag('لم تُزوّد معلمة data مضغوطة.');
       document.getElementById('props').textContent = 'لا توجد بيانات.';
@@ -108,7 +109,7 @@
         setDiag('محاولة فك الضغط وفك JSON...');
         let jsonText = null;
         try {
-          // المفترض أن المُرسِل استخدم LZString.compressToEncodedURIComponent
+          // نفترض أن المُرسِل استخدم compressToEncodedURIComponent
           jsonText = LZString.decompressFromEncodedURIComponent(compressed);
           if (jsonText === null) throw new Error('قيمة data غير صالحة أو لم تُنشأ بواسطة compressToEncodedURIComponent');
         } catch (e) {
@@ -132,15 +133,19 @@
             style: function(){ return { color:'#d33', weight:2, fillColor:'#f99', fillOpacity:0.35 }; },
             pointToLayer: function(f, latlng){ return L.circleMarker(latlng, { radius:6, fillColor:'#1565c0', color:'#fff', weight:1, fillOpacity:1 }); },
             onEachFeature: function(feature, layer){
-              const title = (feature.properties && (feature.properties.name || feature.properties.title || feature.properties.الاسم || feature.properties.Name)) || '';
-              const lines = [];
-              if (feature.properties) for (const k in feature.properties) lines.push('<b>' + escapeHtml(k) + '</b>: ' + escapeHtml(String(feature.properties[k])));
-              const html = '<div style="direction:rtl;text-align:right">' + (title ? ('<strong>' + escapeHtml(title) + '</strong><br/>') : '') + lines.join('<br/>') + '</div>';
-              layer.bindPopup(html);
+              // بناء popup يظهر الحقول المرئية المعرفة داخل الـ feature نفسه
+              const rows = buildVisibleRowsFromFeature(feature);
+              const popupHtml = renderRowsToTable(rows);
+              layer.bindPopup('<div style="direction:rtl;text-align:right">' + popupHtml + '</div>');
+
+              // عند النقر نعرض الخصائص في اللوحة الجانبية
+              layer.on('click', function(){
+                showFeatureProps(feature, 'props');
+              });
             }
           }).addTo(map);
 
-          // fitBounds بعد مهلة صغيرة
+          // fitBounds بعد مهلة صغيرة لضمان تحميل البلاطات
           setTimeout(function(){
             try {
               const bounds = geoLayer.getBounds();
@@ -148,7 +153,6 @@
                 map.fitBounds(bounds.pad(0.05));
                 setDiag('تمت إعادة التحجيم تلقائياً ليلائم البيانات.');
               } else {
-                // حالة نقطة واحدة أو عدم وجود bounds صالحة
                 const features = gj.features || [];
                 if (features.length === 1 && features[0].geometry && features[0].geometry.type === 'Point') {
                   const c = features[0].geometry.coordinates;
@@ -164,8 +168,9 @@
             }
           }, 200);
 
-          // عرض ملخّص الخصائص
+          // عرض خصائص أول فيتشر بشكل افتراضي
           displayPropsSummary(gj);
+
           // جهّز رابط العرض المضغوط لكن لا تعرضه تلقائياً
           const shareUrl = location.origin + location.pathname + '?data=' + encodeURIComponent(compressed) + (titleParam ? ('&title=' + encodeURIComponent(titleParam)) : '') + (zoomParam ? ('&zoom=' + zoomParam) : '') + (latParam && lngParam ? ('&lat=' + latParam + '&lng=' + lngParam) : '');
           linkBox.textContent = shareUrl;
@@ -175,26 +180,65 @@
       })();
     }
 
-    function displayPropsSummary(gj){
+    // --- Visible fields helpers (كل Feature يحتوي __visible_fields__) ---
+    function buildVisibleRowsFromFeature(feature) {
+      const props = (feature && feature.properties) ? feature.properties : {};
+      const vf = props.__visible_fields__;
+      if (Array.isArray(vf) && vf.length > 0) {
+        return vf.map(item => {
+          if (!item || !item.name) return null;
+          const key = String(item.name);
+          if (!(key in props)) return null;
+          const alias = (item.alias && String(item.alias)) || key;
+          return { alias: alias, key: key, value: props[key] };
+        }).filter(r => r !== null);
+      }
+      // fallback: عرض كل الحقول العامة
+      const keys = Object.keys(props).filter(k => !k.startsWith('_') && k !== '__visible_fields__');
+      return keys.map(k => ({ alias: k, key: k, value: props[k] }));
+    }
+
+    function renderRowsToTable(rows) {
+      if (!rows || rows.length === 0) return '<div class="muted">لا توجد خصائص للعرض.</div>';
+      let html = '<table><thead><tr><th>الحقل</th><th>القيمة</th></tr></thead><tbody>';
+      rows.forEach(r => {
+        html += '<tr><td>' + escapeHtml(String(r.alias)) + '</td><td>' + escapeHtml(String(r.value === undefined || r.value === null ? '' : r.value)) + '</td></tr>';
+      });
+      html += '</tbody></table>';
+      return html;
+    }
+
+    function showFeatureProps(feature, targetElementOrId) {
+      const targetEl = (typeof targetElementOrId === 'string') ? document.getElementById(targetElementOrId) : targetElementOrId;
+      if (!targetEl) return;
       try {
-        if (!gj || !gj.features || gj.features.length === 0) {
-          document.getElementById('props').textContent = 'لا توجد فيتشرات.';
-          return;
-        }
-        const first = gj.features[0];
-        const props = first.properties || {};
-        const keys = Object.keys(props);
-        if (keys.length === 0) { document.getElementById('props').textContent = 'العنصر الأول بلا خصائص.'; return; }
-        let html = '<table><thead><tr><th>المفتاح</th><th>القيمة</th></tr></thead><tbody>';
-        keys.forEach(k => html += '<tr><td>' + escapeHtml(k) + '</td><td>' + escapeHtml(String(props[k])) + '</td></tr>');
-        html += '</tbody></table>';
-        document.getElementById('props').innerHTML = html;
+        const rows = buildVisibleRowsFromFeature(feature);
+        targetEl.innerHTML = renderRowsToTable(rows);
       } catch (e) {
-        document.getElementById('props').textContent = 'خطأ في عرض الخصائص.';
+        targetEl.textContent = 'خطأ في عرض الخصائص.';
+        console.error(e);
       }
     }
 
-    // زر نسخ الرابط المضغوط للحافظة
+    // --- displayPropsSummary: يعرض خصائص أول Feature اعتماداً على __visible_fields__ ---
+    function displayPropsSummary(gj){
+      try {
+        const target = document.getElementById('props');
+        if (!gj || !Array.isArray(gj.features) || gj.features.length === 0) {
+          target.textContent = 'لا توجد فيتشرات.';
+          return;
+        }
+        const firstFeature = gj.features[0];
+        const rows = buildVisibleRowsFromFeature(firstFeature);
+        target.innerHTML = renderRowsToTable(rows);
+      } catch (e) {
+        const target = document.getElementById('props');
+        if (target) target.textContent = 'خطأ في عرض الخصائص.';
+        console.error(e);
+      }
+    }
+
+    // --- أزرار واجهة ---
     btnCopy.addEventListener('click', function(){
       if (!compressed){ alert('لا توجد بيانات للنسخ'); return; }
       const shareUrl = location.origin + location.pathname + '?data=' + encodeURIComponent(compressed) + (titleParam ? ('&title=' + encodeURIComponent(titleParam)) : '');
@@ -205,7 +249,6 @@
       }
     });
 
-    // زر تنزيل GeoJSON مفكوك
     btnDownload.addEventListener('click', function(){
       if (!compressed){ alert('لا توجد بيانات'); return; }
       try {
@@ -218,7 +261,7 @@
       } catch (e) { alert('فشل تنزيل GeoJSON: ' + (e && e.message ? e.message : String(e))); }
     });
 
-    // فحص مصغّر للتأكد من تحميل Leaflet
+    // فحص خفيف لـ Leaflet وارتفاع الخريطة
     setTimeout(function(){
       try {
         console.log('Leaflet version:', L.version);
