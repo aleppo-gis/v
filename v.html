@@ -3,210 +3,251 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>عارض طبقة من رابط</title>
+  <title>عارض GeoJSON</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     html,body{height:100%;margin:0;font-family:Tahoma,Arial,sans-serif;background:#fff;color:#111}
-    #wrap{display:flex;flex-direction:row;height:100vh}
-    #side{width:360px;min-width:220px;padding:12px;border-left:1px solid #eee;box-sizing:border-box;direction:rtl;overflow:auto}
-    #map{flex:1}
-    h3{margin:0 0 8px 0;color:#1565c0}
-    .small{font-size:13px;color:#666;margin-bottom:8px}
-    table{width:100%;border-collapse:collapse;font-size:13px}
-    th,td{border:1px solid #eee;padding:6px;text-align:right}
-    .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
-    button{background:#1565c0;color:#fff;border:0;padding:8px 10px;border-radius:4px;cursor:pointer}
-    button.secondary{background:#6c757d}
+    .layout{display:flex;height:100vh;gap:8px}
+    #map{flex:1;min-height:200px;border-radius:6px;border:1px solid #e6e6e6}
+    #side{width:360px;min-width:240px;padding:12px;border-right:1px solid #eee;box-sizing:border-box;direction:rtl;overflow:auto}
+    h3{margin:0 0 8px;color:#1565c0}
+    .muted{color:#666;font-size:13px}
     .link{word-break:break-all;background:#fafafa;border:1px dashed #e6e6e6;padding:8px;border-radius:4px}
-    .muted{color:#777;font-size:13px}
+    .error{background:#ffecec;border:1px solid #f5c6cb;color:#900;padding:8px;border-radius:4px;margin-top:8px}
+    table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+    th,td{border:1px solid #eee;padding:6px;text-align:right}
+    button{background:#1565c0;color:#fff;border:0;padding:8px 10px;border-radius:4px;cursor:pointer}
+    .controls{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
   </style>
 </head>
 <body>
-  <div id="wrap">
+  <div class="layout">
     <div id="map"></div>
     <aside id="side" aria-live="polite">
-      <h3>عارض الطبقة</h3>
-      <div class="small">يقرأ GeoJSON مشفّر Base64 من معلمة data في الرابط</div>
+      <h3>عارض الطبقة من الرابط</h3>
+      <div class="muted">يقرأ معلمة <strong>data</strong> كقيمة Base64 (UTF‑8) مرمّزة بـ encodeURIComponent.</div>
 
-      <div>
+      <div style="margin-top:12px">
         <strong>رابط العرض الحالي</strong>
         <div id="currentLink" class="link">—</div>
       </div>
 
-      <div style="margin-top:10px">
-        <strong>معلومات العنصر</strong>
+      <div style="margin-top:12px">
+        <strong>ملخص الخصائص</strong>
         <div id="props" class="muted">لا توجد بيانات بعد</div>
       </div>
 
       <div class="controls">
-        <button id="btnCopy" title="نسخ الرابط الحالي">نسخ الرابط</button>
-        <button id="btnDownloadGeo" class="secondary" title="تنزيل GeoJSON">تنزيل GeoJSON</button>
-        <button id="btnDownloadHTML" class="secondary" title="تنزيل صفحة HTML مستقلة">تنزيل HTML</button>
+        <button id="btnCopy">نسخ الرابط</button>
+        <button id="btnDownload">تنزيل GeoJSON</button>
       </div>
 
-      <div style="margin-top:12px" class="muted">
-        مدعوم: data (Base64-encoded UTF-8 GeoJSON). يمكن إضافة معلمات اختيارية: title, zoom, lat, lng.
+      <div id="diagnostics" style="margin-top:12px">
+        <div class="muted">تشخيص سريع</div>
+        <div id="diagText" class="muted" style="margin-top:6px">جارٍ الفحص...</div>
       </div>
+
+      <div id="error" class="error" style="display:none"></div>
     </aside>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    // Base64 <-> Unicode helpers
-    function b64EncodeUnicode(str){ return btoa(unescape(encodeURIComponent(str))); }
-    function b64DecodeUnicode(str){ return decodeURIComponent(escape(atob(str))); }
+    // ---- Helpers: Base64 UTF-8 ----
+    function b64DecodeUnicode(str) {
+      // str: raw base64 (no URL-encoding)
+      try {
+        return decodeURIComponent(escape(atob(str)));
+      } catch (e) {
+        // بديل إن فشل (محمول)
+        try { return decodeURIComponent(Array.prototype.map.call(atob(str), function(c){ return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2); }).join('')); } catch (e2) { throw e; }
+      }
+    }
 
-    // قراءة معلمات URL
-    const params = new URLSearchParams(location.search);
-    const dataParam = params.get('data') || '';
-    const titleParam = params.get('title') || '';
-    const zoomParam = params.get('zoom') ? Number(params.get('zoom')) : null;
-    const latParam = params.get('lat') ? Number(params.get('lat')) : null;
-    const lngParam = params.get('lng') ? Number(params.get('lng')) : null;
+    function b64EncodeUnicode(str) { return btoa(unescape(encodeURIComponent(str))); }
 
-    // Map init
-    const map = L.map('map', {zoomControl:true}).setView([24.7745,46.7155], 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:''}).addTo(map);
-    let geoLayer = L.geoJSON(null).addTo(map);
-
-    // UI refs
+    // ---- DOM refs ----
     const currentLinkDiv = document.getElementById('currentLink');
     const propsDiv = document.getElementById('props');
+    const diagText = document.getElementById('diagText');
+    const errorDiv = document.getElementById('error');
     const btnCopy = document.getElementById('btnCopy');
-    const btnDownloadGeo = document.getElementById('btnDownloadGeo');
-    const btnDownloadHTML = document.getElementById('btnDownloadHTML');
+    const btnDownload = document.getElementById('btnDownload');
 
-    function showMessage(msg){ propsDiv.innerHTML = msg; }
-
-    // توليد رابط مشاركة (يعيد نفس الصفحة مع نفس معلمة data)
-    function currentShareLink() {
-      return location.href;
+    // ---- Map init (delay until DOM ready) ----
+    let map;
+    try {
+      map = L.map('map', { zoomControl: true });
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '' }).addTo(map);
+    } catch (e) {
+      showError('فشل تهيئة خريطة Leaflet: ' + e.message);
     }
 
-    // تنزيل Blob
-    function downloadBlob(filename, content, mime='application/json') {
-      const blob = new Blob([content], {type:mime});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+    function showError(msg) {
+      errorDiv.style.display = 'block';
+      errorDiv.textContent = msg;
+      console.error(msg);
     }
 
-    // تعقيم HTML بسيط
-    function escapeHtml(s){ return String(s).replace(/[&<>"'`=\/]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','/':'&#47;','`':'&#96;','=':'&#61;'}[c])); }
+    function clearError() {
+      errorDiv.style.display = 'none';
+      errorDiv.textContent = '';
+    }
 
-    // إظهار الخصائص من أول عنصر أو من كل العناصر
-    function displayProperties(gj) {
-      if (!gj || !gj.features || gj.features.length === 0) {
-        showMessage('لا توجد فيتشرات في GeoJSON');
-        return;
-      }
-      const first = gj.features[0];
-      const props = first.properties || {};
-      let html = '<table><thead><tr><th>المفتاح</th><th>القيمة</th></tr></thead><tbody>';
-      const keys = Object.keys(props);
-      if (keys.length === 0) {
-        html += '<tr><td colspan="2">لا توجد خصائص</td></tr>';
-      } else {
+    function setDiag(msg) { diagText.textContent = msg; }
+
+    // ---- قراءة معلمة data من الرابط ----
+    const params = new URLSearchParams(location.search);
+    const rawParam = params.get('data') || '';
+    currentLinkDiv.textContent = location.href;
+
+    if (!rawParam) {
+      clearError();
+      setDiag('لم تُزوّد معلمة data. يمكنك إنشاء رابط مثل: ?data=' + encodeURIComponent(b64EncodeUnicode(JSON.stringify({
+        type: 'FeatureCollection',
+        features: [{
+          type:'Feature',
+          properties:{الاسم:'مثال'},
+          geometry:{type:'Polygon', coordinates:[[[46.715,24.774],[46.716,24.774],[46.716,24.775],[46.715,24.775],[46.715,24.774]]]}
+        }]
+      }))));
+      propsDiv.textContent = 'لا توجد بيانات.';
+    } else {
+      // نحاول فك الترميز تدريجياً مع معالجة الأخطاء المحتملة
+      (function processData() {
+        setDiag('محاولة فك وترجمة البيانات...');
+        clearError();
+
+        // rawParam قد تكون encodeURIComponent(...) من المرسل
+        let urlDecoded;
+        try {
+          urlDecoded = decodeURIComponent(rawParam);
+        } catch (e) {
+          urlDecoded = rawParam; // إذا كانت غير مرمّزة
+        }
+
+        // جرب فك base64 مباشرة
+        let jsonText;
+        try {
+          jsonText = b64DecodeUnicode(urlDecoded);
+        } catch (err) {
+          showError('فشل فك Base64 من معلمة data: ' + err.message);
+          setDiag('تأكد أن المرسل استخدم b64EncodeUnicode ثم encodeURIComponent.');
+          return;
+        }
+
+        // جرب تحليل JSON
+        let gj;
+        try {
+          gj = JSON.parse(jsonText);
+        } catch (err) {
+          showError('فشل تحليل JSON بعد فك Base64: ' + err.message);
+          setDiag('طول النص: ' + (jsonText ? jsonText.length : 0) + ' حرف. انظر Console للمزيد.');
+          console.log('decoded JSON text preview:', jsonText.slice(0,1000));
+          return;
+        }
+
+        setDiag('GeoJSON صالح. عرض على الخريطة...');
+
+        // ---- عرض GeoJSON ----
+        try {
+          const geoLayer = L.geoJSON(gj, {
+            style: function(){ return { color:'#d33', weight:2, fillColor:'#f99', fillOpacity:0.35 }; },
+            pointToLayer: function(f, latlng){ return L.circleMarker(latlng, { radius:6, fillColor:'#1565c0', color:'#fff', weight:1, fillOpacity:1 }); },
+            onEachFeature: function(feature, layer){
+              const title = (feature.properties && (feature.properties.name || feature.properties.title || feature.properties.الاسم || feature.properties.Name)) || '';
+              const lines = [];
+              if (feature.properties) for (const k in feature.properties) {
+                lines.push('<b>' + escapeHtml(k) + '</b>: ' + escapeHtml(String(feature.properties[k])));
+              }
+              const html = '<div style="direction:rtl;text-align:right">' + (title ? ('<strong>' + escapeHtml(title) + '</strong><br/>') : '') + lines.join('<br/>') + '</div>';
+              layer.bindPopup(html);
+            }
+          }).addTo(map);
+
+          // تحقق من ارتفاع العنصر
+          const h = document.getElementById('map').offsetHeight;
+          console.log('map container height:', h);
+          if (!h || h < 50) {
+            setDiag('تحذير: ارتفاع حاوية الخريطة صغير أو صفر؛ تأكد من CSS.');
+          }
+
+          // fitBounds بعد مهلة قصيرة لضمان تحميل البلاطات
+          setTimeout(function(){
+            try {
+              const bounds = geoLayer.getBounds();
+              if (bounds.isValid && bounds.isValid()) {
+                map.fitBounds(bounds.pad(0.05));
+                setDiag('تمت إعادة التحجيم تلقائياً ليطابق البيانات.');
+              } else {
+                // إذا لم تكن bounds صالحة، إذا كان فيتشر نقطة واحدة نضع view عليها
+                const features = gj.features || [];
+                if (features.length === 1 && features[0].geometry && features[0].geometry.type === 'Point') {
+                  const c = features[0].geometry.coordinates; // [lng,lat]
+                  map.setView([c[1], c[0]], params.get('zoom') ? Number(params.get('zoom')) : 16);
+                  setDiag('البيانات نقطة واحدة، تم تعيين التكبير حولها.');
+                } else {
+                  setDiag('لا يوجد حدود صالحة للبيانات لعمل fitBounds.');
+                }
+              }
+            } catch (e) {
+              console.warn('fitBounds error', e);
+              setDiag('فشل fitBounds: ' + e.message);
+            }
+          }, 200);
+
+          // عرض خصائص أول عنصر ملخصاً
+          displayPropsSummary(gj);
+          currentLinkDiv.textContent = location.href;
+        } catch (e) {
+          showError('فشل عرض GeoJSON على الخريطة: ' + e.message);
+        }
+      })();
+    }
+
+    // ------- وظائف مساعدة UI -------
+    function displayPropsSummary(gj) {
+      try {
+        if (!gj || !gj.features || gj.features.length === 0) {
+          propsDiv.textContent = 'لا توجد فيتشرات.';
+          return;
+        }
+        const first = gj.features[0];
+        const props = first.properties || {};
+        const keys = Object.keys(props);
+        if (keys.length === 0) {
+          propsDiv.textContent = 'العنصر الأول بلا خصائص.';
+          return;
+        }
+        let html = '<table><thead><tr><th>المفتاح</th><th>القيمة</th></tr></thead><tbody>';
         keys.forEach(k => {
           html += '<tr><td>' + escapeHtml(k) + '</td><td>' + escapeHtml(String(props[k])) + '</td></tr>';
         });
-      }
-      html += '</tbody></table>';
-      html += '<div style="margin-top:8px" class="muted">إجمالي العناصر: ' + gj.features.length + '</div>';
-      propsDiv.innerHTML = html;
-    }
-
-    // عرض GeoJSON على الخريطة
-    function showGeoJSON(gj) {
-      geoLayer.clearLayers();
-      geoLayer = L.geoJSON(gj, {
-        style: function(){ return { color:'#d33', weight:2, fillColor:'#f99', fillOpacity:0.35 }; },
-        pointToLayer: function(f,latlng){ return L.circleMarker(latlng, {radius:6, fillColor:'#1565c0', color:'#fff', weight:1, fillOpacity:1}); },
-        onEachFeature: function(feature, layer){
-          var title = (feature.properties && (feature.properties.name || feature.properties.title || feature.properties.الاسم)) || '';
-          var lines = [];
-          if (feature.properties) {
-            for (var k in feature.properties) {
-              lines.push('<b>' + escapeHtml(k) + '</b>: ' + escapeHtml(String(feature.properties[k])));
-            }
-          }
-          var html = '<div style="direction:rtl;text-align:right">' + (title ? ('<strong>' + escapeHtml(title) + '</strong><br>') : '') + lines.join('<br>') + '</div>';
-          layer.bindPopup(html);
-        }
-      }).addTo(map);
-
-      try {
-        if (!isNaN(latParam) && !isNaN(lngParam)) {
-          var z = (!isNaN(zoomParam) ? zoomParam : Math.max(13, map.getZoom()));
-          map.setView([latParam, lngParam], z);
-        } else {
-          var bounds = geoLayer.getBounds();
-          if (bounds.isValid()) map.fitBounds(bounds.pad(0.05));
-        }
-      } catch(e) { /* ignore */ }
-
-      displayProperties(gj);
-      currentLinkDiv.textContent = currentShareLink();
-    }
-
-    // معالجة معلمة data
-    if (!dataParam) {
-      showMessage('لم تُزوّد معلمة data في الرابط. مثال: ?data=' + encodeURIComponent(b64EncodeUnicode(JSON.stringify({
-        type:'FeatureCollection', features:[{
-          type:'Feature', properties:{الاسم:'مثال'}, geometry:{type:'Polygon', coordinates:[[[46.715,24.774],[46.716,24.774],[46.716,24.775],[46.715,24.775],[46.715,24.774]]]}
-        }]
-      }))));
-      currentLinkDiv.textContent = location.href;
-    } else {
-      try {
-        // dataParam قد تكون مفروضة بالـ encodeURIComponent سابقاً
-        var decoded = b64DecodeUnicode(decodeURIComponent(dataParam));
-        var geojson = JSON.parse(decoded);
-        showGeoJSON(geojson);
-      } catch (err) {
-        showMessage('خطأ في فك أو تحليل معلمة data: ' + (err && err.message ? err.message : String(err)));
-        currentLinkDiv.textContent = location.href;
+        html += '</tbody></table>';
+        propsDiv.innerHTML = html;
+      } catch (e) {
+        propsDiv.textContent = 'خطأ في عرض الخصائص: ' + e.message;
       }
     }
 
-    // أزرار مساعدة
+    function escapeHtml(s){ return String(s).replace(/[&<>"'`=\/]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','/':'&#47;','`':'&#96;'}[c]); }); }
+
+    // زر نسخ الرابط
     btnCopy.addEventListener('click', function(){
-      var u = currentShareLink();
-      navigator.clipboard.writeText(u).then(function(){ alert('تم نسخ الرابط'); }, function(){ prompt('انسخ الرابط يدوياً', u); });
+      navigator.clipboard?.writeText(location.href).then(function(){ alert('تم نسخ الرابط'); }, function(){ prompt('انسخ الرابط يدوياً', location.href); });
     });
 
-    btnDownloadGeo.addEventListener('click', function(){
-      if (!dataParam) { alert('لا توجد بيانات للتحميل'); return; }
+    // زر تنزيل GeoJSON مفكوك
+    btnDownload.addEventListener('click', function(){
+      if (!rawParam) { alert('لا توجد بيانات للتحميل'); return; }
       try {
-        var decoded = b64DecodeUnicode(decodeURIComponent(dataParam));
-        downloadBlob('layer.geojson', decoded, 'application/geo+json');
-      } catch (e) { alert('فشل التحميل: ' + e.message); }
-    });
-
-    btnDownloadHTML.addEventListener('click', function(){
-      if (!dataParam) { alert('لا توجد بيانات للتحميل'); return; }
-      try {
-        var decoded = b64DecodeUnicode(decodeURIComponent(dataParam));
-        var safeEmbedded = decoded.replace(/<\/script>/gi, '<\\/script>');
-        var page = '<!doctype html>' +
-          '<html lang="ar" dir="rtl">' +
-          '<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>عرض طبقة</title>' +
-          '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/></head>' +
-          '<body style="margin:0"><div id="map" style="height:100vh"></div>' +
-          '<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>' +
-          '<script>' +
-          'var gj = ' + JSON.stringify(JSON.parse(safeEmbedded)) + ';' +
-          'var map = L.map("map").setView([24.7745,46.7155],13);' +
-          'L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:""}).addTo(map);' +
-          'var layer = L.geoJSON(gj,{style:function(){return {color:"#d33",weight:2,fillColor:"#f99",fillOpacity:0.35};}}).addTo(map);' +
-          'map.fitBounds(layer.getBounds().pad(0.05));' +
-          '<\/script></body></html>';
-        downloadBlob('layer-view.html', page, 'text/html');
-      } catch (e) { alert('فشل إنشاء الصفحة: ' + e.message); }
+        let decoded = b64DecodeUnicode(decodeURIComponent(rawParam));
+        const blob = new Blob([decoded], { type: 'application/geo+json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'layer.geojson';
+        document.body.appendChild(a); a.click(); a.remove();
+      } catch (e) { alert('فشل تنزيل GeoJSON: ' + e.message); }
     });
   </script>
 </body>
