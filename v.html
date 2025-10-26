@@ -31,12 +31,6 @@
         <div id="props" class="muted">لا توجد بيانات بعد</div>
       </div>
 
-      <div class="controls">
-        <button id="btnCopy">نسخ رابط العرض (مضغوط)</button>
-        <button id="btnDownload" class="secondary">تنزيل GeoJSON</button>
-        <button id="btnToggleLink" class="secondary" title="إظهار/إخفاء رابط العرض">إظهار الرابط</button>
-      </div>
-
       <div id="linkBox" class="link" style="display:none;margin-top:10px"></div>
 
       <div id="diagnostics" style="margin-top:12px">
@@ -83,18 +77,6 @@
     const zoomParam = params.get('zoom') ? Number(params.get('zoom')) : null;
     const latParam = params.get('lat') ? Number(params.get('lat')) : null;
     const lngParam = params.get('lng') ? Number(params.get('lng')) : null;
-
-    const linkBox = document.getElementById('linkBox');
-    const btnCopy = document.getElementById('btnCopy');
-    const btnDownload = document.getElementById('btnDownload');
-    const btnToggleLink = document.getElementById('btnToggleLink');
-
-    // Toggle link visibility
-    linkBox.style.display = 'none';
-    btnToggleLink.addEventListener('click', function(){
-      if (linkBox.style.display === 'none'){ linkBox.style.display = 'block'; btnToggleLink.textContent = 'إخفاء الرابط'; }
-      else { linkBox.style.display = 'none'; btnToggleLink.textContent = 'إظهار الرابط'; }
-    });
 
     // Process data (expects compressed string produced by LZString.compressToEncodedURIComponent)
     if (!compressed) {
@@ -217,25 +199,6 @@
     }
 
     // Buttons
-    btnCopy.addEventListener('click', function(){
-      if (!compressed){ alert('لا توجد بيانات للنسخ'); return; }
-      const shareUrl = location.origin + location.pathname + '?data=' + encodeURIComponent(compressed) + (titleParam ? ('&title=' + encodeURIComponent(titleParam)) : '');
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(shareUrl).then(function(){ alert('تم نسخ رابط العرض'); }, function(){ prompt('انسخ الرابط يدوياً', shareUrl); });
-      } else { prompt('انسخ الرابط', shareUrl); }
-    });
-
-    btnDownload.addEventListener('click', function(){
-      if (!compressed){ alert('لا توجد بيانات'); return; }
-      try {
-        const jsonText = LZString.decompressFromEncodedURIComponent(compressed);
-        const blob = new Blob([jsonText], { type: 'application/geo+json' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'layer.geojson';
-        document.body.appendChild(a); a.click(); a.remove();
-      } catch (e) { alert('فشل تنزيل GeoJSON: ' + (e && e.message ? e.message : String(e))); }
-    });
 
     // Quick checks
     setTimeout(function(){
