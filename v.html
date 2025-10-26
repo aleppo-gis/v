@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>عارض طبقة من رابط</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    html,body{height:100%;margin:0;font-family:Tahoma,Arial,sans-serif;background:#fff;color:#111}
+    #wrap{display:flex;flex-direction:row;height:100vh}
+    #side{width:360px;min-width:220px;padding:12px;border-left:1px solid #eee;box-sizing:border-box;direction:rtl;overflow:auto}
+    #map{flex:1}
+    h3{margin:0 0 8px 0;color:#1565c0}
+    .small{font-size:13px;color:#666;margin-bottom:8px}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th,td{border:1px solid #eee;padding:6px;text-align:right}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+    button{background:#1565c0;color:#fff;border:0;padding:8px 10px;border-radius:4px;cursor:pointer}
+    button.secondary{background:#6c757d}
+    .link{word-break:break-all;background:#fafafa;border:1px dashed #e6e6e6;padding:8px;border-radius:4px}
+    .muted{color:#777;font-size:13px}
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <div id="map"></div>
+    <aside id="side" aria-live="polite">
+      <h3>عارض الطبقة</h3>
+      <div class="small">يقرأ GeoJSON مشفّر Base64 من معلمة data في الرابط</div>
+
+      <div>
+        <strong>رابط العرض الحالي</strong>
+        <div id="currentLink" class="link">—</div>
+      </div>
+
+      <div style="margin-top:10px">
+        <strong>معلومات العنصر</strong>
+        <div id="props" class="muted">لا توجد بيانات بعد</div>
+      </div>
+
+      <div class="controls">
+        <button id="btnCopy" title="نسخ الرابط الحالي">نسخ الرابط</button>
+        <button id="btnDownloadGeo" class="secondary" title="تنزيل GeoJSON">تنزيل GeoJSON</button>
+        <button id="btnDownloadHTML" class="secondary" title="تنزيل صفحة HTML مستقلة">تنزيل HTML</button>
+      </div>
+
+      <div style="margin-top:12px" class="muted">
+        مدعوم: data (Base64-encoded UTF-8 GeoJSON). يمكن إضافة معلمات اختيارية: title, zoom, lat, lng.
+      </div>
+    </aside>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    // Base64 <-> Unicode helpers
+    function b64EncodeUnicode(str){ return btoa(unescape(encodeURIComponent(str))); }
+    function b64DecodeUnicode(str){ return decodeURIComponent(escape(atob(str))); }
+
+    // قراءة معلمات URL
+    const params = new URLSearchParams(location.search);
+    const dataParam = params.get('data') || '';
+    const titleParam = params.get('title') || '';
+    const zoomParam = params.get('zoom') ? Number(params.get('zoom')) : null;
+    const latParam = params.get('lat') ? Number(params.get('lat')) : null;
+    const lngParam = params.get('lng') ? Number(params.get('lng')) : null;
+
+    // Map init
+    const map = L.map('map', {zoomControl:true}).setView([24.7745,46.7155], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:''}).addTo(map);
+    let geoLayer = L.geoJSON(null).addTo(map);
+
+    // UI refs
+    const currentLinkDiv = document.getElementById('currentLink');
+    const propsDiv = document.getElementById('props');
+    const btnCopy = document.getElementById('btnCopy');
+    const btnDownloadGeo = document.getElementById('btnDownloadGeo');
+    const btnDownloadHTML = document.getElementById('btnDownloadHTML');
+
+    function showMessage(msg){ propsDiv.innerHTML = msg; }
+
+    // توليد رابط مشاركة (يعيد نفس الصفحة مع نفس معلمة data)
+    function currentShareLink() {
+      return location.href;
+    }
+
+    // تنزيل Blob
+    function downloadBlob(filename, content, mime='application/json') {
+      const blob = new Blob([content], {type:mime});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    // تعقيم HTML بسيط
+    function escapeHtml(s){ return String(s).replace(/[&<>"'`=\/]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','/':'&#47;','`':'&#96;','=':'&#61;'}[c])); }
+
+    // إظهار الخصائص من أول عنصر أو من كل العناصر
+    function displayProperties(gj) {
+      if (!gj || !gj.features || gj.features.length === 0) {
+        showMessage('لا توجد فيتشرات في GeoJSON');
+        return;
+      }
+      const first = gj.features[0];
+      const props = first.properties || {};
+      let html = '<table><thead><tr><th>المفتاح</th><th>القيمة</th></tr></thead><tbody>';
+      const keys = Object.keys(props);
+      if (keys.length === 0) {
+        html += '<tr><td colspan="2">لا توجد خصائص</td></tr>';
+      } else {
+        keys.forEach(k => {
+          html += '<tr><td>' + escapeHtml(k) + '</td><td>' + escapeHtml(String(props[k])) + '</td></tr>';
+        });
+      }
+      html += '</tbody></table>';
+      html += '<div style="margin-top:8px" class="muted">إجمالي العناصر: ' + gj.features.length + '</div>';
+      propsDiv.innerHTML = html;
+    }
+
+    // عرض GeoJSON على الخريطة
+    function showGeoJSON(gj) {
+      geoLayer.clearLayers();
+      geoLayer = L.geoJSON(gj, {
+        style: function(){ return { color:'#d33', weight:2, fillColor:'#f99', fillOpacity:0.35 }; },
+        pointToLayer: function(f,latlng){ return L.circleMarker(latlng, {radius:6, fillColor:'#1565c0', color:'#fff', weight:1, fillOpacity:1}); },
+        onEachFeature: function(feature, layer){
+          var title = (feature.properties && (feature.properties.name || feature.properties.title || feature.properties.الاسم)) || '';
+          var lines = [];
+          if (feature.properties) {
+            for (var k in feature.properties) {
+              lines.push('<b>' + escapeHtml(k) + '</b>: ' + escapeHtml(String(feature.properties[k])));
+            }
+          }
+          var html = '<div style="direction:rtl;text-align:right">' + (title ? ('<strong>' + escapeHtml(title) + '</strong><br>') : '') + lines.join('<br>') + '</div>';
+          layer.bindPopup(html);
+        }
+      }).addTo(map);
+
+      try {
+        if (!isNaN(latParam) && !isNaN(lngParam)) {
+          var z = (!isNaN(zoomParam) ? zoomParam : Math.max(13, map.getZoom()));
+          map.setView([latParam, lngParam], z);
+        } else {
+          var bounds = geoLayer.getBounds();
+          if (bounds.isValid()) map.fitBounds(bounds.pad(0.05));
+        }
+      } catch(e) { /* ignore */ }
+
+      displayProperties(gj);
+      currentLinkDiv.textContent = currentShareLink();
+    }
+
+    // معالجة معلمة data
+    if (!dataParam) {
+      showMessage('لم تُزوّد معلمة data في الرابط. مثال: ?data=' + encodeURIComponent(b64EncodeUnicode(JSON.stringify({
+        type:'FeatureCollection', features:[{
+          type:'Feature', properties:{الاسم:'مثال'}, geometry:{type:'Polygon', coordinates:[[[46.715,24.774],[46.716,24.774],[46.716,24.775],[46.715,24.775],[46.715,24.774]]]}
+        }]
+      }))));
+      currentLinkDiv.textContent = location.href;
+    } else {
+      try {
+        // dataParam قد تكون مفروضة بالـ encodeURIComponent سابقاً
+        var decoded = b64DecodeUnicode(decodeURIComponent(dataParam));
+        var geojson = JSON.parse(decoded);
+        showGeoJSON(geojson);
+      } catch (err) {
+        showMessage('خطأ في فك أو تحليل معلمة data: ' + (err && err.message ? err.message : String(err)));
+        currentLinkDiv.textContent = location.href;
+      }
+    }
+
+    // أزرار مساعدة
+    btnCopy.addEventListener('click', function(){
+      var u = currentShareLink();
+      navigator.clipboard.writeText(u).then(function(){ alert('تم نسخ الرابط'); }, function(){ prompt('انسخ الرابط يدوياً', u); });
+    });
+
+    btnDownloadGeo.addEventListener('click', function(){
+      if (!dataParam) { alert('لا توجد بيانات للتحميل'); return; }
+      try {
+        var decoded = b64DecodeUnicode(decodeURIComponent(dataParam));
+        downloadBlob('layer.geojson', decoded, 'application/geo+json');
+      } catch (e) { alert('فشل التحميل: ' + e.message); }
+    });
+
+    btnDownloadHTML.addEventListener('click', function(){
+      if (!dataParam) { alert('لا توجد بيانات للتحميل'); return; }
+      try {
+        var decoded = b64DecodeUnicode(decodeURIComponent(dataParam));
+        var safeEmbedded = decoded.replace(/<\/script>/gi, '<\\/script>');
+        var page = '<!doctype html>' +
+          '<html lang="ar" dir="rtl">' +
+          '<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>عرض طبقة</title>' +
+          '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/></head>' +
+          '<body style="margin:0"><div id="map" style="height:100vh"></div>' +
+          '<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>' +
+          '<script>' +
+          'var gj = ' + JSON.stringify(JSON.parse(safeEmbedded)) + ';' +
+          'var map = L.map("map").setView([24.7745,46.7155],13);' +
+          'L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:""}).addTo(map);' +
+          'var layer = L.geoJSON(gj,{style:function(){return {color:"#d33",weight:2,fillColor:"#f99",fillOpacity:0.35};}}).addTo(map);' +
+          'map.fitBounds(layer.getBounds().pad(0.05));' +
+          '<\/script></body></html>';
+        downloadBlob('layer-view.html', page, 'text/html');
+      } catch (e) { alert('فشل إنشاء الصفحة: ' + e.message); }
+    });
+  </script>
+</body>
+</html>
