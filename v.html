@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>عارض الطبقات المضغوطة (Alias Props)</title>
+  <title></title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     html,body{height:100%;margin:0;font-family:Tahoma,Arial,sans-serif;background:#fff;color:#111}
@@ -26,49 +26,16 @@
   <div class="layout">
     <div id="map"></div>
     <aside id="side" aria-live="polite">
-      <h3>عارض الطبقة (مضغوط — خصائص Alias)</h3>
-      <div class="muted">تُقرأ معلمة <strong>data</strong> مضغوطة بواسطة LZ-String. الخصائص داخل GeoJSON يجب أن تكون مفاتيح Alias فقط.</div>
-
       <div style="margin-top:12px">
-        <strong>معلومات مختصرة</strong>
+        <strong>معلومات المشروع</strong>
         <div id="props" class="muted">لا توجد بيانات بعد</div>
       </div>
-
-      <div class="controls">
-        <button id="btnCopy">نسخ رابط العرض (مضغوط)</button>
-        <button id="btnDownload" class="secondary">تنزيل GeoJSON</button>
-        <button id="btnToggleLink" class="secondary" title="إظهار/إخفاء رابط العرض">إظهار الرابط</button>
-      </div>
-
-      <div id="linkBox" class="link" style="display:none;margin-top:10px"></div>
-
-      <div id="diagnostics" style="margin-top:12px">
-        <div class="muted">تشخيص سريع</div>
-        <div id="diagText" class="muted" style="margin-top:6px">جارٍ الفحص...</div>
-      </div>
-
-      <div id="error" class="error"></div>
-      <div class="small">معاملات اختيارية مدعومة: <code>title</code>, <code>zoom</code>, <code>lat</code>, <code>lng</code>.</div>
     </aside>
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    // Helpers
-    function showError(msg){
-      const e = document.getElementById('error');
-      e.style.display = 'block';
-      e.textContent = msg;
-      console.error(msg);
-    }
-    function clearError(){
-      const e = document.getElementById('error');
-      e.style.display = 'none';
-      e.textContent = '';
-    }
-    function setDiag(msg){ document.getElementById('diagText').textContent = msg; }
-    function escapeHtml(s){ return String(s).replace(/[&<>"'`=\/]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','/':'&#47;','`':'&#96;','=':'&#61;'}[c]); }); }
 
     // Map init
     let map;
@@ -88,32 +55,16 @@
     const lngParam = params.get('lng') ? Number(params.get('lng')) : null;
 
     const linkBox = document.getElementById('linkBox');
-    const btnCopy = document.getElementById('btnCopy');
-    const btnDownload = document.getElementById('btnDownload');
-    const btnToggleLink = document.getElementById('btnToggleLink');
-
-    // Toggle link visibility
-    linkBox.style.display = 'none';
-    btnToggleLink.addEventListener('click', function(){
-      if (linkBox.style.display === 'none'){ linkBox.style.display = 'block'; btnToggleLink.textContent = 'إخفاء الرابط'; }
-      else { linkBox.style.display = 'none'; btnToggleLink.textContent = 'إظهار الرابط'; }
-    });
 
     // Process data (expects compressed string produced by LZString.compressToEncodedURIComponent)
-    if (!compressed) {
-      setDiag('لم تُزوّد معلمة data مضغوطة.');
-      document.getElementById('props').textContent = 'لا توجد بيانات.';
-    } else {
+    if (compressed){
       (function processCompressed(){
         clearError();
-        setDiag('محاولة فك الضغط وفك JSON...');
         let jsonText = null;
         try {
           jsonText = LZString.decompressFromEncodedURIComponent(compressed);
           if (jsonText === null) throw new Error('قيمة data غير صالحة أو لم تُنشأ بواسطة compressToEncodedURIComponent');
         } catch (e) {
-          showError('فشل فك الضغط: ' + (e && e.message ? e.message : String(e)));
-          setDiag('تأكد أن المرسل استخدم LZString.compressToEncodedURIComponent.');
           return;
         }
 
@@ -121,12 +72,9 @@
         try {
           gj = JSON.parse(jsonText);
         } catch (e) {
-          showError('فشل تحليل JSON بعد فك الضغط: ' + e.message);
-          console.log('decoded preview:', (jsonText || '').slice(0,1000));
           return;
         }
 
-        setDiag('GeoJSON صالح. عرض على الخريطة...');
         try {
           const geoLayer = L.geoJSON(gj, {
             style: function(){ return { color:'#2b7', weight:2, fillColor:'#bdf', fillOpacity:0.4 }; },
@@ -147,20 +95,15 @@
               const bounds = geoLayer.getBounds();
               if (bounds && bounds.isValid && bounds.isValid()) {
                 map.fitBounds(bounds.pad(0.05));
-                setDiag('تمت إعادة التحجيم تلقائياً ليلائم البيانات.');
               } else {
                 const features = gj.features || [];
                 if (features.length === 1 && features[0].geometry && features[0].geometry.type === 'Point') {
                   const c = features[0].geometry.coordinates;
                   map.setView([c[1], c[0]], zoomParam || 16);
-                  setDiag('البيانات نقطة واحدة، تم تعيين التكبير حولها.');
                 } else {
-                  setDiag('لا توجد حدود صالحة لعمل fitBounds.');
                 }
               }
             } catch (e) {
-              console.warn('fitBounds error', e);
-              setDiag('فشل fitBounds: ' + (e && e.message ? e.message : String(e)));
             }
           }, 200);
 
@@ -169,9 +112,7 @@
 
           // جهّز رابط العرض المضغوط لكن لا تعرضه تلقائياً
           const shareUrl = location.origin + location.pathname + '?data=' + encodeURIComponent(compressed) + (titleParam ? ('&title=' + encodeURIComponent(titleParam)) : '') + (zoomParam ? ('&zoom=' + zoomParam) : '') + (latParam && lngParam ? ('&lat=' + latParam + '&lng=' + lngParam) : '');
-          linkBox.textContent = shareUrl;
         } catch (e) {
-          showError('فشل عرض GeoJSON: ' + (e && e.message ? e.message : String(e)));
         }
       })();
     }
@@ -195,8 +136,6 @@
         const rows = Object.keys(propsObj).map(k => ({ alias: k, value: propsObj[k] }));
         targetEl.innerHTML = renderRowsToTable(rows);
       } catch (e) {
-        targetEl.textContent = 'خطأ في عرض الخصائص.';
-        console.error(e);
       }
     }
 
@@ -220,35 +159,7 @@
     }
 
     // Buttons
-    btnCopy.addEventListener('click', function(){
-      if (!compressed){ alert('لا توجد بيانات للنسخ'); return; }
-      const shareUrl = location.origin + location.pathname + '?data=' + encodeURIComponent(compressed) + (titleParam ? ('&title=' + encodeURIComponent(titleParam)) : '');
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(shareUrl).then(function(){ alert('تم نسخ رابط العرض'); }, function(){ prompt('انسخ الرابط يدوياً', shareUrl); });
-      } else { prompt('انسخ الرابط', shareUrl); }
-    });
 
-    btnDownload.addEventListener('click', function(){
-      if (!compressed){ alert('لا توجد بيانات'); return; }
-      try {
-        const jsonText = LZString.decompressFromEncodedURIComponent(compressed);
-        const blob = new Blob([jsonText], { type: 'application/geo+json' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'layer.geojson';
-        document.body.appendChild(a); a.click(); a.remove();
-      } catch (e) { alert('فشل تنزيل GeoJSON: ' + (e && e.message ? e.message : String(e))); }
-    });
-
-    // Quick checks
-    setTimeout(function(){
-      try {
-        console.log('Leaflet version:', L.version);
-        const h = document.getElementById('map').offsetHeight;
-        console.log('map container height:', h);
-        if (!h || h < 50) setDiag('تحذير: ارتفاع حاوية الخريطة صغير. تأكد من CSS.');
-      } catch(e){}
-    }, 600);
   </script>
 </body>
 </html>
