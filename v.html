@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>عارض الطبقات المضغوطة</title>
+  <title>عارض الطبقات المضغوطة (Alias Props)</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     html,body{height:100%;margin:0;font-family:Tahoma,Arial,sans-serif;background:#fff;color:#111}
@@ -26,8 +26,8 @@
   <div class="layout">
     <div id="map"></div>
     <aside id="side" aria-live="polite">
-      <h3>عارض الطبقة (مضغوط)</h3>
-      <div class="muted">تُقرأ معلمة <strong>data</strong> مضغوطة بواسطة LZ-String (compressToEncodedURIComponent).</div>
+      <h3>عارض الطبقة (مضغوط — خصائص Alias)</h3>
+      <div class="muted">تُقرأ معلمة <strong>data</strong> مضغوطة بواسطة LZ-String. الخصائص داخل GeoJSON يجب أن تكون مفاتيح Alias فقط.</div>
 
       <div style="margin-top:12px">
         <strong>معلومات مختصرة</strong>
@@ -55,7 +55,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    // --- Helpers ---
+    // Helpers
     function showError(msg){
       const e = document.getElementById('error');
       e.style.display = 'block';
@@ -70,7 +70,7 @@
     function setDiag(msg){ document.getElementById('diagText').textContent = msg; }
     function escapeHtml(s){ return String(s).replace(/[&<>"'`=\/]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','/':'&#47;','`':'&#96;','=':'&#61;'}[c]); }); }
 
-    // --- Map init ---
+    // Map init
     let map;
     try {
       map = L.map('map', { zoomControl: true });
@@ -79,7 +79,7 @@
       showError('فشل تهيئة خريطة Leaflet: ' + e.message);
     }
 
-    // --- Params ---
+    // Params
     const params = new URLSearchParams(location.search);
     const compressed = params.get('data') || '';
     const titleParam = params.get('title') || '';
@@ -92,14 +92,14 @@
     const btnDownload = document.getElementById('btnDownload');
     const btnToggleLink = document.getElementById('btnToggleLink');
 
-    // Toggle رابط العرض
+    // Toggle link visibility
     linkBox.style.display = 'none';
     btnToggleLink.addEventListener('click', function(){
       if (linkBox.style.display === 'none'){ linkBox.style.display = 'block'; btnToggleLink.textContent = 'إخفاء الرابط'; }
       else { linkBox.style.display = 'none'; btnToggleLink.textContent = 'إظهار الرابط'; }
     });
 
-    // --- Process data ---
+    // Process data (expects compressed string produced by LZString.compressToEncodedURIComponent)
     if (!compressed) {
       setDiag('لم تُزوّد معلمة data مضغوطة.');
       document.getElementById('props').textContent = 'لا توجد بيانات.';
@@ -109,12 +109,11 @@
         setDiag('محاولة فك الضغط وفك JSON...');
         let jsonText = null;
         try {
-          // نفترض أن المُرسِل استخدم compressToEncodedURIComponent
           jsonText = LZString.decompressFromEncodedURIComponent(compressed);
           if (jsonText === null) throw new Error('قيمة data غير صالحة أو لم تُنشأ بواسطة compressToEncodedURIComponent');
         } catch (e) {
           showError('فشل فك الضغط: ' + (e && e.message ? e.message : String(e)));
-          setDiag('تأكد أن الرابط يُرسل قيمة data مضغوطة بصيغة compressToEncodedURIComponent.');
+          setDiag('تأكد أن المرسل استخدم LZString.compressToEncodedURIComponent.');
           return;
         }
 
@@ -130,22 +129,19 @@
         setDiag('GeoJSON صالح. عرض على الخريطة...');
         try {
           const geoLayer = L.geoJSON(gj, {
-            style: function(){ return { color:'#d33', weight:2, fillColor:'#f99', fillOpacity:0.35 }; },
+            style: function(){ return { color:'#2b7', weight:2, fillColor:'#bdf', fillOpacity:0.4 }; },
             pointToLayer: function(f, latlng){ return L.circleMarker(latlng, { radius:6, fillColor:'#1565c0', color:'#fff', weight:1, fillOpacity:1 }); },
             onEachFeature: function(feature, layer){
-              // بناء popup يظهر الحقول المرئية المعرفة داخل الـ feature نفسه
-              const rows = buildVisibleRowsFromFeature(feature);
+              // properties هنا مفاتيحها هي Alias مباشرة، لذا اعرض كل مفاتيح properties
+              const propsObj = (feature && feature.properties) ? feature.properties : {};
+              const rows = Object.keys(propsObj).map(k => ({ alias: k, value: propsObj[k] }));
               const popupHtml = renderRowsToTable(rows);
               layer.bindPopup('<div style="direction:rtl;text-align:right">' + popupHtml + '</div>');
-
-              // عند النقر نعرض الخصائص في اللوحة الجانبية
-              layer.on('click', function(){
-                showFeatureProps(feature, 'props');
-              });
+              layer.on('click', function(){ showFeatureProps(feature, 'props'); });
             }
           }).addTo(map);
 
-          // fitBounds بعد مهلة صغيرة لضمان تحميل البلاطات
+          // fitBounds (بعد مهلة صغيرة)
           setTimeout(function(){
             try {
               const bounds = geoLayer.getBounds();
@@ -168,7 +164,7 @@
             }
           }, 200);
 
-          // عرض خصائص أول فيتشر بشكل افتراضي
+          // افتراضي: عرض خصائص أول Feature (Alias keys)
           displayPropsSummary(gj);
 
           // جهّز رابط العرض المضغوط لكن لا تعرضه تلقائياً
@@ -180,24 +176,7 @@
       })();
     }
 
-    // --- Visible fields helpers (كل Feature يحتوي __visible_fields__) ---
-    function buildVisibleRowsFromFeature(feature) {
-      const props = (feature && feature.properties) ? feature.properties : {};
-      const vf = props.__visible_fields__;
-      if (Array.isArray(vf) && vf.length > 0) {
-        return vf.map(item => {
-          if (!item || !item.name) return null;
-          const key = String(item.name);
-          if (!(key in props)) return null;
-          const alias = (item.alias && String(item.alias)) || key;
-          return { alias: alias, key: key, value: props[key] };
-        }).filter(r => r !== null);
-      }
-      // fallback: عرض كل الحقول العامة
-      const keys = Object.keys(props).filter(k => !k.startsWith('_') && k !== '__visible_fields__');
-      return keys.map(k => ({ alias: k, key: k, value: props[k] }));
-    }
-
+    // Render helpers (keys already Alias)
     function renderRowsToTable(rows) {
       if (!rows || rows.length === 0) return '<div class="muted">لا توجد خصائص للعرض.</div>';
       let html = '<table><thead><tr><th>الحقل</th><th>القيمة</th></tr></thead><tbody>';
@@ -212,7 +191,8 @@
       const targetEl = (typeof targetElementOrId === 'string') ? document.getElementById(targetElementOrId) : targetElementOrId;
       if (!targetEl) return;
       try {
-        const rows = buildVisibleRowsFromFeature(feature);
+        const propsObj = (feature && feature.properties) ? feature.properties : {};
+        const rows = Object.keys(propsObj).map(k => ({ alias: k, value: propsObj[k] }));
         targetEl.innerHTML = renderRowsToTable(rows);
       } catch (e) {
         targetEl.textContent = 'خطأ في عرض الخصائص.';
@@ -220,7 +200,7 @@
       }
     }
 
-    // --- displayPropsSummary: يعرض خصائص أول Feature اعتماداً على __visible_fields__ ---
+    // displayPropsSummary: يعرض خصائص أول Feature (المفاتيح هي Alias)
     function displayPropsSummary(gj){
       try {
         const target = document.getElementById('props');
@@ -229,7 +209,8 @@
           return;
         }
         const firstFeature = gj.features[0];
-        const rows = buildVisibleRowsFromFeature(firstFeature);
+        const propsObj = (firstFeature && firstFeature.properties) ? firstFeature.properties : {};
+        const rows = Object.keys(propsObj).map(k => ({ alias: k, value: propsObj[k] }));
         target.innerHTML = renderRowsToTable(rows);
       } catch (e) {
         const target = document.getElementById('props');
@@ -238,15 +219,13 @@
       }
     }
 
-    // --- أزرار واجهة ---
+    // Buttons
     btnCopy.addEventListener('click', function(){
       if (!compressed){ alert('لا توجد بيانات للنسخ'); return; }
       const shareUrl = location.origin + location.pathname + '?data=' + encodeURIComponent(compressed) + (titleParam ? ('&title=' + encodeURIComponent(titleParam)) : '');
       if (navigator.clipboard) {
         navigator.clipboard.writeText(shareUrl).then(function(){ alert('تم نسخ رابط العرض'); }, function(){ prompt('انسخ الرابط يدوياً', shareUrl); });
-      } else {
-        prompt('انسخ الرابط', shareUrl);
-      }
+      } else { prompt('انسخ الرابط', shareUrl); }
     });
 
     btnDownload.addEventListener('click', function(){
@@ -261,7 +240,7 @@
       } catch (e) { alert('فشل تنزيل GeoJSON: ' + (e && e.message ? e.message : String(e))); }
     });
 
-    // فحص خفيف لـ Leaflet وارتفاع الخريطة
+    // Quick checks
     setTimeout(function(){
       try {
         console.log('Leaflet version:', L.version);
