@@ -31,15 +31,6 @@
         <div id="props" class="muted">لا توجد بيانات بعد</div>
       </div>
 
-      <div id="linkBox" class="link" style="display:none;margin-top:10px"></div>
-
-      <div id="diagnostics" style="margin-top:12px">
-        <div class="muted">تشخيص سريع</div>
-        <div id="diagText" class="muted" style="margin-top:6px">جارٍ الفحص...</div>
-      </div>
-
-      <div id="error" class="error"></div>
-      <div class="small">معاملات اختيارية مدعومة: <code>title</code>, <code>zoom</code>, <code>lat</code>, <code>lng</code>.</div>
     </aside>
   </div>
 
@@ -158,7 +149,7 @@
     // Render helpers (keys already Alias)
     function renderRowsToTable(rows) {
       if (!rows || rows.length === 0) return '<div class="muted">لا توجد خصائص للعرض.</div>';
-      let html = '<table><thead><tr><th>الحقل</th><th>القيمة</th></tr></thead><tbody>';
+      let html = '<table><tbody>';
       rows.forEach(r => {
         html += '<tr><td>' + escapeHtml(String(r.alias)) + '</td><td>' + escapeHtml(String(r.value === undefined || r.value === null ? '' : r.value)) + '</td></tr>';
       });
