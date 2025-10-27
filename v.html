@@ -155,7 +155,7 @@
       if (!rows || rows.length === 0) return '<div class="muted">لا توجد خصائص للعرض.</div>';
       let html = '<table>';
       rows.forEach(r => {
-        html += '<tr><th background-color:#f0f0f0;>' + escapeHtml(String(r.alias)) + '</th><td>' + escapeHtml(String(r.value === undefined || r.value === null ? '' : r.value)) + '</td></tr>';
+        html += '<tr><th style="background-color:#f0f0f0;">' + escapeHtml(String(r.alias)) + '</th><td>' + escapeHtml(String(r.value === undefined || r.value === null ? '' : r.value)) + '</td></tr>';
       });
       html += '</table>';
       return html;
