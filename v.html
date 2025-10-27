@@ -49,7 +49,7 @@
       map = L.map('map', { zoomControl: true });
       L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { attribution: '' }).addTo(map);
     } catch (e) {
-      showError('فشل تهيئة خريطة Leaflet: ' + e.message);
+      showError('');
     }
 
     // Params
@@ -62,16 +62,16 @@
 
     // Process data (expects compressed string produced by LZString.compressToEncodedURIComponent)
     if (!compressed) {
-      setDiag('لم تُزوّد معلمة data مضغوطة.');
+      setDiag('');
       document.getElementById('props').textContent = 'لا توجد بيانات.';
     } else {
       (function processCompressed(){
         clearError();
-        setDiag('محاولة فك الضغط وفك JSON...');
+        setDiag('');
         let jsonText = null;
         try {
           jsonText = LZString.decompressFromEncodedURIComponent(compressed);
-          if (jsonText === null) throw new Error('قيمة data غير صالحة أو لم تُنشأ بواسطة compressToEncodedURIComponent');
+          if (jsonText === null) throw new Error('');
         } catch (e) {
           showError('');
           setDiag('');
