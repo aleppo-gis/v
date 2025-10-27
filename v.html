@@ -1,12 +1,15 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>عرض مشروع</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="Style/style.css"></style>
+  <link rel="stylesheet" href="Style/style.css">
+  </style>
 </head>
+
 <body>
   <div class="layout">
     <div id="map"></div>
@@ -23,6 +26,8 @@
       </div>
 
       <div id="error" class="error"></div>
+
+
     </aside>
   </div>
 
@@ -30,18 +35,18 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     // Helpers
-    function showError(msg){
+    function showError(msg) {
       const e = document.getElementById('error');
       e.style.display = 'block';
       e.textContent = msg;
     }
-    function clearError(){
+    function clearError() {
       const e = document.getElementById('error');
       e.style.display = 'none';
       e.textContent = '';
     }
-    function setDiag(msg){ document.getElementById('diagText').textContent = msg; }
-    function escapeHtml(s){ return String(s).replace(/[&<>"'`=\/]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','/':'&#47;','`':'&#96;','=':'&#61;'}[c]); }); }
+    function setDiag(msg) { document.getElementById('diagText').textContent = msg; }
+    function escapeHtml(s) { return String(s).replace(/[&<>"'`=\/]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '/': '&#47;', '`': '&#96;', '=': '&#61;' }[c]); }); }
 
     // Map init
     let map;
@@ -65,7 +70,7 @@
       setDiag('');
       document.getElementById('props').textContent = 'لا توجد بيانات.';
     } else {
-      (function processCompressed(){
+      (function processCompressed() {
         clearError();
         setDiag('');
         let jsonText = null;
@@ -89,20 +94,20 @@
         setDiag('');
         try {
           const geoLayer = L.geoJSON(gj, {
-            style: function(){ return { color:'#2b7', weight:2, fillColor:'#bdf', fillOpacity:0.4 }; },
-            pointToLayer: function(f, latlng){ return L.circleMarker(latlng, { radius:6, fillColor:'#1565c0', color:'#fff', weight:1, fillOpacity:1 }); },
-            onEachFeature: function(feature, layer){
+            style: function () { return { color: '#2b7', weight: 2, fillColor: '#bdf', fillOpacity: 0.4 }; },
+            pointToLayer: function (f, latlng) { return L.circleMarker(latlng, { radius: 6, fillColor: '#1565c0', color: '#fff', weight: 1, fillOpacity: 1 }); },
+            onEachFeature: function (feature, layer) {
               // properties هنا مفاتيحها هي Alias مباشرة، لذا اعرض كل مفاتيح properties
               const propsObj = (feature && feature.properties) ? feature.properties : {};
               const rows = Object.keys(propsObj).map(k => ({ alias: k, value: propsObj[k] }));
               const popupHtml = renderRowsToTable(rows);
               layer.bindPopup('<div style="direction:rtl;text-align:right">' + popupHtml + '</div>');
-              layer.on('click', function(){ showFeatureProps(feature, 'props'); });
+              layer.on('click', function () { showFeatureProps(feature, 'props'); });
             }
           }).addTo(map);
 
           // fitBounds (بعد مهلة صغيرة)
-          setTimeout(function(){
+          setTimeout(function () {
             try {
               const bounds = geoLayer.getBounds();
               if (bounds && bounds.isValid && bounds.isValid()) {
@@ -159,7 +164,7 @@
     }
 
     // displayPropsSummary: يعرض خصائص أول Feature (المفاتيح هي Alias)
-    function displayPropsSummary(gj){
+    function displayPropsSummary(gj) {
       try {
         const target = document.getElementById('props');
         if (!gj || !Array.isArray(gj.features) || gj.features.length === 0) {
@@ -179,13 +184,15 @@
     // Buttons
 
     // Quick checks
-    setTimeout(function(){
+    setTimeout(function () {
       try {
         const h = document.getElementById('map').offsetHeight;
         if (!h || h < 50) setDiag('');
-      } catch(e){}
+      } catch (e) { }
     }, 600);
-  </script>
+
+
+</script>
 </body>
+
 </html>
-```
