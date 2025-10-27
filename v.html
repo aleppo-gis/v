@@ -89,7 +89,7 @@
 
         try {
           const geoLayer = L.geoJSON(gj, {
-            style: function () { return { color: 'red', weight: 2, fillColor: 'red', fillOpacity: 0.8 }; },
+            style: function () { return { color: 'green', weight: 2, fillColor: 'green', fillOpacity: 0.7 }; },
             pointToLayer: function (f, latlng) { return L.circleMarker(latlng, { radius: 6, fillColor: '#1565c0', color: '#fff', weight: 2, fillOpacity: 1 }); },
             onEachFeature: function (feature, layer) {
               // properties هنا مفاتيحها هي Alias مباشرة، لذا اعرض كل مفاتيح properties
