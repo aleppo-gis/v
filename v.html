@@ -71,15 +71,11 @@
       document.getElementById('props').textContent = 'لا توجد بيانات.';
     } else {
       (function processCompressed() {
-        clearError();
-        setDiag('');
         let jsonText = null;
         try {
           jsonText = LZString.decompressFromEncodedURIComponent(compressed);
           if (jsonText === null) throw new Error('');
         } catch (e) {
-          showError('');
-          setDiag('');
           return;
         }
 
@@ -91,11 +87,10 @@
           return;
         }
 
-        setDiag('');
         try {
           const geoLayer = L.geoJSON(gj, {
-            style: function () { return { color: '#2b7', weight: 2, fillColor: '#bdf', fillOpacity: 0.4 }; },
-            pointToLayer: function (f, latlng) { return L.circleMarker(latlng, { radius: 6, fillColor: '#1565c0', color: '#fff', weight: 1, fillOpacity: 1 }); },
+            style: function () { return { color: 'red', weight: 2, fillColor: 'red', fillOpacity: 0.8 }; },
+            pointToLayer: function (f, latlng) { return L.circleMarker(latlng, { radius: 6, fillColor: '#1565c0', color: '#fff', weight: 2, fillOpacity: 1 }); },
             onEachFeature: function (feature, layer) {
               // properties هنا مفاتيحها هي Alias مباشرة، لذا اعرض كل مفاتيح properties
               const propsObj = (feature && feature.properties) ? feature.properties : {};
@@ -118,13 +113,10 @@
                 if (features.length === 1 && features[0].geometry && features[0].geometry.type === 'Point') {
                   const c = features[0].geometry.coordinates;
                   map.setView([c[1], c[0]], zoomParam || 16);
-                  setDiag('');
                 } else {
-                  setDiag('');
                 }
               }
             } catch (e) {
-              setDiag('');
             }
           }, 200);
 
@@ -135,7 +127,6 @@
           const shareUrl = location.origin + location.pathname + '?data=' + encodeURIComponent(compressed) + (titleParam ? ('&title=' + encodeURIComponent(titleParam)) : '') + (zoomParam ? ('&zoom=' + zoomParam) : '') + (latParam && lngParam ? ('&lat=' + latParam + '&lng=' + lngParam) : '');
           linkBox.textContent = shareUrl;
         } catch (e) {
-          showError('');
         }
       })();
     }
@@ -184,7 +175,6 @@
     setTimeout(function () {
       try {
         const h = document.getElementById('map').offsetHeight;
-        if (!h || h < 50) setDiag('');
       } catch (e) { }
     }, 600);
 
