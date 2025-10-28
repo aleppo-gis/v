@@ -54,7 +54,6 @@
       map = L.map('map', { zoomControl: true });
       L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { attribution: '' }).addTo(map);
     } catch (e) {
-      showError('');
     }
 
     // Params
@@ -67,7 +66,6 @@
 
     // Process data (expects compressed string produced by LZString.compressToEncodedURIComponent)
     if (!compressed) {
-      setDiag('');
       document.getElementById('props').textContent = 'لا توجد بيانات.';
     } else {
       (function processCompressed() {
@@ -83,7 +81,6 @@
         try {
           gj = JSON.parse(jsonText);
         } catch (e) {
-          showError('');
           return;
         }
 
@@ -107,7 +104,6 @@
               const bounds = geoLayer.getBounds();
               if (bounds && bounds.isValid && bounds.isValid()) {
                 map.fitBounds(bounds.pad(0.05));
-                setDiag('');
               } else {
                 const features = gj.features || [];
                 if (features.length === 1 && features[0].geometry && features[0].geometry.type === 'Point') {
